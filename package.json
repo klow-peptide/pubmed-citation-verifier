@@ -3,13 +3,35 @@
   "version": "1.0.0",
   "description": "Checks that each cited PMID belongs to the cited article, using the PubMed API. Finds the right PMID when it does not. No dependencies.",
   "main": "src/index.js",
-  "bin": { "pubmed-verify": "bin/pubmed-verify.js" },
-  "files": ["src", "bin"],
-  "scripts": { "test": "node --test test/*.test.js" },
-  "keywords": ["pubmed", "pmid", "citation", "reference", "hallucination", "llm", "fact-checking", "ncbi", "e-utilities"],
+  "bin": {
+    "pubmed-verify": "bin/pubmed-verify.js"
+  },
+  "files": [
+    "src",
+    "bin"
+  ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "keywords": [
+    "pubmed",
+    "pmid",
+    "citation",
+    "reference",
+    "hallucination",
+    "llm",
+    "fact-checking",
+    "ncbi",
+    "e-utilities"
+  ],
   "homepage": "https://github.com/klow-peptide/pubmed-citation-verifier",
-  "repository": { "type": "git", "url": "https://github.com/klow-peptide/pubmed-citation-verifier.git" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/klow-peptide/pubmed-citation-verifier.git"
+  },
   "author": "Klow Peptide (https://klow-peptide.com)",
   "license": "MIT",
-  "engines": { "node": ">=18" }
+  "engines": {
+    "node": ">=18"
+  }
 }
