@@ -61,7 +61,7 @@ function load() {
       else if (bad.includes(r) && 'suggestion' in r) console.log('              No reliable match found: remove the link or check by hand.');
     });
     const ok = results.filter(r => r.status === 'ok').length;
-    console.log(`\n${ok} ok, ${bad.length} wrong, ${results.length - ok - bad.length} without PMID (${results.length} citations)`);
+    console.log(`\n${ok} ok, ${bad.length} wrong, ${results.length - ok - bad.length} without PMID (${results.length} citation${results.length === 1 ? '' : 's'})`);
   }
   process.exit(bad.length ? 1 : 0);
 })().catch(e => { console.error(e.message); process.exit(2); });
