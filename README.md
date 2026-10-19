@@ -38,10 +38,10 @@ Read the PubMed title before you change anything.
 ## Install
 
 ```
-npm install github:klow-peptide/pubmed-citation-verifier
+npm install pubmed-citation-verifier
 ```
 
-Or clone the repo. There are no dependencies.
+Or run it without installing: `npx -p pubmed-citation-verifier pubmed-verify citations.json`. There are no dependencies.
 
 ## Command line
 
@@ -83,7 +83,7 @@ const results = await client.verify([
 ```yaml
 - uses: actions/setup-node@v4
   with: { node-version: 20 }
-- run: npx --yes github:klow-peptide/pubmed-citation-verifier references.json
+- run: npx --yes -p pubmed-citation-verifier pubmed-verify references.json
   env: { NCBI_API_KEY: ${{ secrets.NCBI_API_KEY }} }
 ```
 
