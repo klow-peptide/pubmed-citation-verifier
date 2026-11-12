@@ -1,6 +1,6 @@
 {
   "name": "pubmed-citation-verifier",
-  "version": "1.0.1",
+  "version": "2.0.0",
   "description": "Checks that each cited PMID belongs to the cited article, using the PubMed API. Finds the right PMID when it does not. No dependencies.",
   "main": "src/index.js",
   "bin": {
