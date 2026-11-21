@@ -1,6 +1,6 @@
 {
   "name": "pubmed-citation-verifier",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "description": "Checks that each cited PMID belongs to the cited article, using the PubMed API. Finds the right PMID when it does not. No dependencies.",
   "main": "src/index.js",
   "bin": {
@@ -8,7 +8,8 @@
   },
   "files": [
     "src",
-    "bin"
+    "bin",
+    "SECURITY.md"
   ],
   "scripts": {
     "test": "node --test test/*.test.js"

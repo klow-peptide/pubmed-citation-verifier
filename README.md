@@ -29,14 +29,17 @@ $ node bin/pubmed-verify.js examples/citations.json
 2. **Title words.** The content words of both titles are compared (small words such as "of", "in", "the" are ignored).
    Two distinct papers often have almost the same title: "... in healthy *Japanese* subjects" and "... in healthy *Chinese* subjects"
    score above 0.9. So any differing word (a population, a species, a number such as "type 1" / "type 2") prevents an `ok`.
+   **Polarity and negation words are never ignored:** "with" / "without", "before" / "after", "versus" / "vs",
+   "no" / "not", "plus" / "minus", "presence" / "absence", "increased" / "decreased" and similar pairs.
+   A title pair that differs only by one of these words is never `ok`.
 3. **Metadata.** When the citation gives them, the **first author**, the **year** (one year of tolerance for e-publication
    versus print) and the **journal** are compared with the PubMed record.
 4. **Status.**
 
 | Status | Rule |
 |---|---|
-| `ok` | Similarity 0.9 or more, the same title words, and no cited author, year or journal contradicts PubMed |
-| `review` | Probably the same paper, but not proven: similarity 0.55 to 0.9, or a differing title word, or one conflicting field |
+| `ok` | Similarity 0.9 or more, the same title words, and no cited author, year or journal contradicts PubMed. If the citation gives no author, year or journal, the titles must also be identical after normalization (case and punctuation are ignored); a close but non-identical title is `review`. |
+| `review` | Probably the same paper, but not proven: similarity 0.55 to 0.9, or a differing title word (including a polarity word), or one conflicting field, or a non-identical title with no cited metadata |
 | `mismatch` | Similarity below 0.55, or a differing title word plus a conflicting field, or two conflicting fields |
 | `not_found` | PubMed does not know the PMID |
 | `no_pmid` | The citation has no PMID |
@@ -51,7 +54,7 @@ and the `reasons` behind a `review` or a `mismatch`.
 6. **Precision first.** A false suggestion would publish a wrong citation. A miss only tells you to check by hand.
    So when no candidate is reliable, the tool says so and suggests nothing.
 
-Give `authors`, `year` and `journal` whenever you can: without them only the title can be checked, and more citations end in `review`.
+Give `authors`, `year` and `journal` whenever you can: without them, `ok` is used only when the titles are identical after normalization; anything less exact ends in `review`.
 
 ## Limits: results need a manual review
 
@@ -131,10 +134,18 @@ where every value was checked this way.
 npm test    # offline, with a fake PubMed
 ```
 
-The tests include near-duplicate titles (another population, another species, type 1 versus type 2) that must never be `ok`.
+The tests include near-duplicate titles (another population, another species, type 1 versus type 2, with versus without) that must never be `ok`, and the rule that a title-only check cannot be `ok` unless the titles are identical after normalization.
+
+## Security and privacy
+
+See [SECURITY.md](SECURITY.md). The tool calls only the NCBI E-utilities API. There is no telemetry.
 
 ## Changelog
 
+- **2.1.0**: polarity and negation words ("with"/"without", "before"/"after", "versus"/"vs", and similar) are never
+  treated as stopwords; a mismatch on them prevents `ok`. When the citation gives no author, year or journal, `ok`
+  requires the titles to be identical after normalization. [SECURITY.md](SECURITY.md) added. Citations that were `ok`
+  in 2.0.0 on a close but non-identical title, or on a with/without pair, are now `review`.
 - **2.0.0**: stricter identity check. `ok` now needs similarity 0.9 or more, the same title words, and no conflicting
   first author, year or journal. New status `review`, new `checks` and `reasons` fields, `--allow-review` option.
   Suggestions are never made for a candidate whose title words differ. Breaking: citations that were `ok` in 1.x may now be `review`.

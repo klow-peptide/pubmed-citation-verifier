@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { createClient, similarity, pmidOf, parseCitationText, titleWordDiff, compareMeta } = require('../src/index.js');
+const { createClient, similarity, pmidOf, parseCitationText, titleWordDiff, compareMeta, judge, POLARITY } = require('../src/index.js');
 
 // Offline fake of the PubMed E-utilities API.
 const DB = {
@@ -63,7 +63,8 @@ const NEAR = {
   '90000001': { title: 'Pharmacokinetics of semaglutide in healthy Japanese subjects.', sortfirstauthor: 'Tanaka H', pubdate: '2015 Mar', source: 'Clin Pharmacol Drug Dev', fulljournalname: 'Clinical pharmacology in drug development' },
   '90000002': { title: 'Pharmacokinetics of semaglutide in healthy Chinese subjects.', sortfirstauthor: 'Li X', pubdate: '2019 Jun', source: 'Clin Ther', fulljournalname: 'Clinical therapeutics' },
   '90000003': { title: 'Efficacy of liraglutide in type 2 diabetes: a randomized trial.', sortfirstauthor: 'Moreau P', pubdate: '2012', source: 'Diabetes Care', fulljournalname: 'Diabetes care' },
-  '90000004': { title: 'Half-life of BPC 157 in rats after intramuscular injection.', sortfirstauthor: 'Novak M', pubdate: '2021', source: 'Peptides', fulljournalname: 'Peptides' }
+  '90000004': { title: 'Half-life of BPC 157 in rats after intramuscular injection.', sortfirstauthor: 'Novak M', pubdate: '2021', source: 'Peptides', fulljournalname: 'Peptides' },
+  '90000005': { title: 'Efficacy of treatment with metformin in type 2 diabetes.', sortfirstauthor: 'Rossi A', pubdate: '2018', source: 'Diabetes Care', fulljournalname: 'Diabetes care' }
 };
 function nearFetch(url) {
   const u = new URL(url);
@@ -143,4 +144,65 @@ test('author formats: "Surname AB", "A. B. Surname", accents', () => {
   assert.equal(compareMeta({ authors: 'J. Muller' }, real).author, 'match');
   assert.equal(compareMeta({ authors: 'Schmidt K' }, real).author, 'conflict');
   assert.equal(compareMeta({}, real).author, 'unknown');
+});
+
+// ---- Polarity / negation words, and title-only decisions. ----
+
+test('polarity words are never treated as stopwords', () => {
+  for (const w of ['with', 'without', 'vs', 'versus', 'before', 'after', 'no', 'not', 'plus', 'minus', 'presence', 'absence', 'increased', 'decreased']) {
+    assert.equal(POLARITY.has(w), true, w);
+  }
+  assert.deepEqual(titleWordDiff('Outcomes with adjuvant therapy', 'Outcomes without adjuvant therapy').sort(), ['with', 'without']);
+  assert.deepEqual(titleWordDiff('Glucose levels before treatment', 'Glucose levels after treatment').sort(), ['after', 'before']);
+  assert.deepEqual(titleWordDiff('Drug A versus placebo', 'Drug A vs placebo').sort(), ['versus', 'vs']);
+});
+
+test('with vs without is never ok, even with high title similarity and no metadata', async () => {
+  const cited = 'Efficacy of treatment without metformin in type 2 diabetes';
+  const real = { title: 'Efficacy of treatment with metformin in type 2 diabetes.', author: 'Rossi A', year: '2018', journal: 'Diabetes Care', journalAbbr: 'Diabetes Care', years: [2018] };
+  const j = judge(cited, real, {});
+  assert.ok(similarity(cited, real.title) > 0.9);
+  assert.notEqual(j.status, 'ok');
+  assert.deepEqual(j.checks.title_words_differ.sort(), ['with', 'without']);
+  const [r] = await nearClient().verify([{ pmid: '90000005', title: cited }]);
+  assert.notEqual(r.status, 'ok');
+  assert.deepEqual(r.checks.title_words_differ.sort(), ['with', 'without']);
+});
+
+test('before vs after, plus vs minus, presence vs absence, increased vs decreased are never ok', () => {
+  const pairs = [
+    ['Glucose levels before treatment in adults', 'Glucose levels after treatment in adults', ['after', 'before']],
+    ['Change plus insulin in fasting glucose', 'Change minus insulin in fasting glucose', ['minus', 'plus']],
+    ['Outcomes in the presence of renal impairment', 'Outcomes in the absence of renal impairment', ['absence', 'presence']],
+    ['Increased risk of hypoglycemia with insulin', 'Decreased risk of hypoglycemia with insulin', ['decreased', 'increased']]
+  ];
+  for (const [a, b, expected] of pairs) {
+    const j = judge(a, { title: b, author: '', year: '', journal: '', journalAbbr: '', years: [] }, {});
+    assert.notEqual(j.status, 'ok', a);
+    assert.deepEqual(j.checks.title_words_differ.sort(), expected, a);
+  }
+});
+
+test('title alone: identical after normalization (punctuation, case) can be ok without metadata', async () => {
+  const [r] = await nearClient().verify([{ pmid: '90000002', title: 'PHARMACOKINETICS of semaglutide in healthy Chinese subjects.' }]);
+  assert.equal(r.status, 'ok');
+});
+
+test('title alone: close but non-identical titles are review, never ok', async () => {
+  // "study" is a stopword, so content words match and similarity is high, but the
+  // strings are not identical after normalization and no author/year/journal was cited.
+  const [r] = await nearClient().verify([{ pmid: '90000002', title: 'Pharmacokinetics of semaglutide in healthy Chinese subjects: a study' }]);
+  assert.equal(r.status, 'review');
+  assert.ok(r.reasons.includes('titles are not identical and author, year and journal were not cited'));
+});
+
+test('title alone: the same close titles can be ok when cited metadata matches', async () => {
+  const [r] = await nearClient().verify([{
+    pmid: '90000002',
+    title: 'Pharmacokinetics of semaglutide in healthy Chinese subjects: a study',
+    authors: 'Li X',
+    year: '2019',
+    journal: 'Clin Ther'
+  }]);
+  assert.equal(r.status, 'ok');
 });
