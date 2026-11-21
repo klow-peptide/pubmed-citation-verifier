@@ -7,11 +7,14 @@
  * differ, searches PubMed for the article the citation describes.
  *
  * A title match alone is not proof: two distinct papers can have almost the
- * same title ("... in Japanese subjects" / "... in Chinese subjects"). So a
- * citation is `ok` only when the titles have the same content words and no
- * cited first author, year or journal contradicts PubMed. Anything in between
- * is `review`: a person must read both records. Results are an aid to manual
- * review, not a replacement for it.
+ * same title ("... in Japanese subjects" / "... in Chinese subjects", or
+ * "... with X" / "... without X"). So a citation is `ok` only when the titles
+ * have the same content words, polarity words agree, and no cited first author,
+ * year or journal contradicts PubMed. When the citation gives no author, year
+ * or journal, `ok` also requires the titles to be identical after normalization;
+ * a close but non-identical title is `review`. Anything in between is `review`:
+ * a person must read both records. Results are an aid to manual review, not a
+ * replacement for it.
  */
 'use strict';
 
@@ -22,7 +25,10 @@ const ACCEPT_RATIO = 0.8;  // a search candidate needs this, plus the checks in 
 
 // Words that do not tell two papers apart. Everything else (numbers, species, populations,
 // drug names, "type 1"/"type 2") must be identical for an `ok`.
-const STOP = new Set('a an the of in on and or for with without to by at from after before as vs versus into its their is are was were be study trial'.split(' '));
+// Polarity and negation words are never stopwords: "with"/"without", "before"/"after",
+// "versus"/"vs" and similar pairs can be the only difference between two papers.
+const STOP = new Set('a an the of in on and or for to by at from as into its their is are was were be study trial'.split(' '));
+const POLARITY = new Set('with without no not non versus vs plus minus absence presence increased decreased increase decrease before after never neither nor lack lacking against absent present'.split(' '));
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const norm = t => String(t || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').replace(/\s+/g, ' ').trim();
@@ -51,7 +57,7 @@ function similarity(a, b) {
 }
 
 const stem = w => (w.length > 4 && w.endsWith('s') && !/(ss|us|is)$/.test(w) ? w.slice(0, -1) : w);
-const contentWords = t => new Set(norm(t).split(' ').filter(w => w && !STOP.has(w)).map(stem));
+const contentWords = t => new Set(norm(t).split(' ').filter(w => w && (POLARITY.has(w) || !STOP.has(w))).map(stem));
 
 /** Content words found in one title but not the other, e.g. ['japanese', 'chinese']. */
 function titleWordDiff(a, b) {
@@ -85,10 +91,18 @@ function compareMeta(cited, real) {
   return out;
 }
 
+/** True when the citation itself gives a first author, a year or a journal. */
+function citedMetaPresent(cited) {
+  if (!cited) return false;
+  return [cited.authors, cited.year, cited.journal].some(v => String(v || '').trim());
+}
+
 /**
  * Decides the status of a cited PMID from the title similarity, the content-word
  * difference and the metadata checks.
- *   ok       same content words, similarity >= 0.9, no conflicting author/year/journal
+ *   ok       same content words, similarity >= 0.9, no conflicting author/year/journal;
+ *            if the citation gives no author, year or journal, the titles must also be
+ *            identical after normalization
  *   mismatch similarity < 0.55; or a conflicting field with different title words; or 2+ conflicts
  *   review   everything else: probably the same paper, but a person must check
  */
@@ -97,14 +111,20 @@ function judge(citedTitle, real, cited) {
   const diff = titleWordDiff(citedTitle, real.title);
   const meta = compareMeta(cited, real);
   const conflicts = Object.keys(meta).filter(k => meta[k] === 'conflict');
+  const identical = norm(citedTitle) === norm(real.title);
   const reasons = [];
   if (ratio < STRICT_RATIO) reasons.push(`title similarity ${round(ratio)} < ${STRICT_RATIO}`);
   if (diff.length && ratio >= OK_RATIO) reasons.push(`title words differ: ${diff.slice(0, 6).join(', ')}`);
   for (const k of conflicts) reasons.push(`${k} differs`);
   let status;
   if (ratio < OK_RATIO || conflicts.length >= 2 || (conflicts.length && diff.length)) status = 'mismatch';
-  else if (ratio >= STRICT_RATIO && !diff.length && !conflicts.length) status = 'ok';
-  else status = 'review';
+  else if (ratio >= STRICT_RATIO && !diff.length && !conflicts.length && (identical || citedMetaPresent(cited))) status = 'ok';
+  else {
+    status = 'review';
+    if (ratio >= STRICT_RATIO && !diff.length && !conflicts.length && !identical && !citedMetaPresent(cited)) {
+      reasons.push('titles are not identical and author, year and journal were not cited');
+    }
+  }
   return { status, ratio, checks: { title_similarity: round(ratio), title_words_differ: diff, ...meta }, reasons };
 }
 
@@ -257,5 +277,6 @@ const round = x => Math.round(x * 100) / 100;
 
 module.exports = {
   createClient, similarity, pmidOf, parseCitationText, titleWordDiff, compareMeta, judge,
+  citedMetaPresent, POLARITY,
   OK_RATIO, STRICT_RATIO, ACCEPT_RATIO
 };
